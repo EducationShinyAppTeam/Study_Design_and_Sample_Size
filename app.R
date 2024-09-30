@@ -4,23 +4,55 @@ library(shinydashboard)
 library(shinyBS)
 library(shinyWidgets)
 library(boastUtils)
+library(ggplot2)
+library(BrailleR)
+library(WebPower)
 
-# Load additional dependencies and setup functions
-# source("global.R")
+# Load additional dependencies and setup functions ----
+baseSize <- function(k, alpha, power, f) {
+  p.body <- quote(
+    expr = {
+      lambda <- n * f^2
+      pf(
+        q = qf(p = alpha, df1 = k - 1, df2 = n - k, lower.tail = FALSE),
+        df1 = k - 1,
+        df2 = n - k,
+        ncp = lambda,
+        lower.tail = FALSE
+      )
+    }
+  )
+  roots <- uniroot(
+    f = function(n) {
+      eval(p.body) - power
+    },
+    interval = c(2 + k + 1e-10, 1e+05)
+  )
+  return(roots$root)
+}
+getSize <- Vectorize(FUN = baseSize)
+
+sampleRounding <- Vectorize(FUN = function(n, k) {
+  if (ceiling(n) %% k == 0) {
+    return(ceiling(n))
+  } else {
+    newSize <- ceiling(n) + (k - ceiling(n) %% k)
+    return(newSize)
+  }
+})
 
 # Define UI for App ----
 ui <- list(
-  ## Create the app page ----
   dashboardPage(
-    skin = "blue",
-    ### Create the app header ----
+    skin = "black",
+    ## Header ----
     dashboardHeader(
-      title = "App Template", # You may use a shortened form of the title here
+      title = "Design: Sample Size",
       titleWidth = 250,
       tags$li(class = "dropdown", actionLink("info", icon("info"))),
       tags$li(
         class = "dropdown",
-        boastUtils::surveyLink(name = "App_Template")
+        boastUtils::surveyLink(name = "Study_Design_and_Sample_Size")
       ),
       tags$li(
         class = "dropdown",
@@ -31,18 +63,14 @@ ui <- list(
         )
       )
     ),
-    ### Create the sidebar/left navigation menu ----
+    ## Sidebar ----
     dashboardSidebar(
       width = 250,
       sidebarMenu(
         id = "pages",
         menuItem("Overview", tabName = "overview", icon = icon("gauge-high")),
         menuItem("Prerequisites", tabName = "prerequisites", icon = icon("book")),
-        menuItem("Example", tabName = "example", icon = icon("book-open-reader")),
         menuItem("Explore", tabName = "explore", icon = icon("wpexplorer")),
-        menuItem("Challenge", tabName = "challenge", icon = icon("gears")),
-        menuItem("Game", tabName = "game", icon = icon("gamepad")),
-        menuItem("Wizard", tabName = "wizard", icon = icon("hat-wizard")),
         menuItem("References", tabName = "references", icon = icon("leanpub"))
       ),
       tags$div(
@@ -50,14 +78,14 @@ ui <- list(
         boastUtils::sidebarFooter()
       )
     ),
-    ### Create the content ----
+    ## Body ----
     dashboardBody(
       tabItems(
-        #### Set up the Overview Page ----
+        ### Overview Page ----
         tabItem(
           tabName = "overview",
           withMathJax(),
-          h1("Sample Application for BOAST Apps"), # This should be the full name.
+          h1("Study Design and Sample Size"),
           p("This is a sample Shiny application for BOAST. Remember, this page
             will act like the front page (home page) of your app. Thus you will
             want to have this page catch attention and describe (in general terms)
@@ -70,7 +98,6 @@ ui <- list(
             tags$li("Challenge yourself."),
             tags$li("Play the game to test how far you've come.")
           ),
-          ##### Go Button--location will depend on your goals
           div(
             style = "text-align: center;",
             bsButton(
@@ -81,16 +108,12 @@ ui <- list(
               style = "default"
             )
           ),
-          ##### Create two lines of space
           br(),
           br(),
           h2("Acknowledgements"),
           p(
             "This version of the app was developed and coded by Neil J.
-            Hatfield  and Robert P. Carey, III.",
-            br(),
-            "We would like to extend a special thanks to the Shiny Program
-            Students.",
+            Hatfield.",
             br(),
             br(),
             "Cite this app as:",
@@ -98,10 +121,10 @@ ui <- list(
             citeApp(),
             br(),
             br(),
-            div(class = "updated", "Last Update: 11/8/2022 by NJH.")
+            div(class = "updated", "Last Update: 9/30/2024 by NJH.")
           )
         ),
-        #### Set up the Prerequisites Page ----
+        ### Prerequisites Page ----
         tabItem(
           tabName = "prerequisites",
           withMathJax(),
@@ -153,54 +176,79 @@ ui <- list(
             often."
           )
         ),
-        #### Note: you must have at least one of the following pages. You might
-        #### have more than one type and/or more than one of the same type. This
-        #### will be up to you and the goals for your app.
-        #### Set up an Explore Page ----
+        ### Explore Page ----
         tabItem(
           tabName = "explore",
           withMathJax(),
-          h2("Explore the Concept"),
-          p("This page should include something for the user to do, the more
-            active and engaging, the better. The purpose of this page is to help
-            the user build a productive understanding of the concept your app
-            is dedicated to."),
-          p("Common elements include graphs, sliders, buttons, etc."),
-          p("The following comes from the NHST Caveats App:"),
+          h2("Influences on Sample Size"),
+          p("There are a number of elements that can influence how large of a
+            sample we should plan for as we design a study. We need to draw upon
+            how many groups our design necessitates, our chosen (overall) Type I
+            risk, our chosen Type II risk (or its complement, power), and our
+            estimate for the effect size. Thinking through how these ideas
+            interact with each other and with sample size can help us become
+            better designers."),
+          p("Use the controls to explore how different elements impact the
+            suggested sample size."),
+          fluidRow(
+            column(
+              width = 4,
+              wellPanel(
+                selectInput(
+                  inputId = "horizQuant",
+                  label = "Select the quantity on the horizontal axis",
+                  choices = c("Effect size", "Type I Risk", "Type II Risk", "Power")
+                ),
+                numericInput(
+                  inputId = "numGroups",
+                  label = "Number of groups",
+                  value = 5,
+                  min = 2,
+                  step = 1
+                ),
+                sliderInput(
+                  inputId = "type1Risk",
+                  label = "Type I Risk, \\(\\mathcal{E}_{I}\\)",
+                  value = 0.07,
+                  min = 0.01,
+                  max = 0.15,
+                  step = 0.01
+                ),
+                sliderInput(
+                  inputId = "type2Risk",
+                  label = "Type II Risk, \\(\\mathcal{E}_{II}\\)",
+                  value = 0.2,
+                  min = 0.01,
+                  max = 0.30,
+                  step = 0.01
+                ),
+                sliderInput(
+                  inputId = "effectSize",
+                  label = "Effect size, Cohen's \\(f\\)",
+                  value = 0.1,
+                  min = 0.05,
+                  max = 1,
+                  step = 0.05
+                ),
+                p("Suggested Values for Cohen's \\(f\\)"),
+                tags$ul(
+                  tags$li("Negligible: \\(0\\leq f < 0.1\\)"),
+                  tags$li("Small: \\(0.1 \\leq f < 0.25\\)"),
+                  tags$li("Medium: \\(0.25 \\leq f < 0.4\\)"),
+                  tags$li("Large: \\(0.4 \\leq f\\)")
+                )
+              )
+            ),
+            column(
+              width = 8,
+              plotOutput(outputId = "sizePlot"),
+              uiOutput(outputId = "plotDesc"),
+              h3("Suggested Sample Size"),
+              uiOutput(outputId = "suggestedSize")
+            )
+          )
         ),
-        #### Set up a Challenge Page ----
-        tabItem(
-          tabName = "challenge",
-          withMathJax(),
-          h2("Challenge Yourself"),
-          p("The general intent of a Challenge page is to have the user take
-            what they learned in an Exploration and apply that knowledge in new
-            contexts/situations. In essence, to have them challenge their
-            understanding by testing themselves."),
-          p("What this page looks like will be up to you. Something you might
-            consider is to re-create the tools of the Exploration page and then
-            a list of questions for the user to then answer.")
-        ),
-        #### Set up a Game Page ----
-        tabItem(
-          tabName = "game",
-          withMathJax(),
-          h2("Practice/Test Yourself with [Type of Game]"),
-          p("On this type of page, you'll set up a game for the user to play.
-            Game types include Tic-Tac-Toe, Matching, and a version Hangman to
-            name a few. If you have ideas for new game type, please let us know.")
-        ),
-        #### Set up a Wizard Page ----
-        tabItem(
-          tabName = "wizard",
-          withMathJax(),
-          h2("Wizard"),
-          p("This page will have a series of inputs and questions for the user to
-            answer/work through in order to have the app create something. These
-            types of Activity pages are currently rare as we try to avoid
-            creating 'calculators' in the BOAST project.")
-        ),
-        #### Set up the References Page ----
+        ### References Page ----
         tabItem(
           tabName = "references",
           withMathJax(),
@@ -234,8 +282,151 @@ server <- function(input, output, session) {
         session = session,
         type = "info",
         title = "Information",
-        text = "This App Template will help you get started building your own app"
+        text = "Explore the relationship between design choices and sample size."
       )
+    }
+  )
+
+  ## Go button ----
+  observeEvent(
+    eventExpr = input$go1,
+    handlerExpr = {
+      updateTabItems(
+        session = session,
+        inputId = 'pages',
+        selected = 'explore'
+      )
+    }
+  )
+
+  ## Explore Plot ----
+  observeEvent(
+    eventExpr = c(input$horizQuant, input$numGroups, input$type1Risk,
+                  input$type2Risk, input$effectSize),
+    handlerExpr = {
+      if (input$horizQuant == "Effect size") {
+        ### Effect size ----
+        sizes <- sapply(
+          X = seq(0.05, 0.5, 0.05),
+          FUN = getSize,
+          k = input$numGroups,
+          alpha = input$type1Risk,
+          power = 1 - input$type2Risk
+        )
+        points <- data.frame(
+          effect_size = seq(0.05, 0.5, 0.05),
+          size = sampleRounding(n = sizes, k = input$numGroups)
+        )
+
+        sampleSizePlot <- ggplot(
+          data = points,
+          mapping = aes(x = effect_size, y = size)
+        ) +
+          geom_point(color = "blue", size = 3) +
+          stat_function(
+            fun = getSize,
+            xlim = c(0.05, 0.5),
+            args = list(k = input$numGroups, alpha = input$type1Risk,
+                        power = 1 - input$type2Risk)
+          ) +
+          labs(
+            title = "Suggested Sample Size for Given Design",
+            y = "Sample size (n)",
+            x = "Effect size, f"
+          ) +
+          theme_bw() +
+          theme(
+            text = element_text(size = 18)
+          )
+      } else if (input$horizQuant == "Type I Risk") {
+        ### Type I ----
+        sizes <- sapply(
+          X = seq(0.01, 0.15, 0.025),
+          FUN = getSize,
+          k = input$numGroups,
+          f = input$effectSize,
+          power = 1 - input$type2Risk
+        )
+        points <- data.frame(
+          alpha = seq(0.01, 0.15, 0.025),
+          raw_size = sizes,
+          round_size = sampleRounding(n = sizes, k = input$numGroups)
+        )
+
+        sampleSizePlot <- ggplot(
+          data = points,
+          mapping = aes(x = alpha, y = raw_size)
+        ) +
+          geom_point(color = "blue", size = 3) +
+          stat_function(
+            fun = getSize,
+            xlim = c(0.01, 0.15),
+            args = list(k = input$numGroups, f = input$effectSize,
+                        power = 1 - input$type2Risk)
+          ) +
+          labs(
+            title = "Suggested Sample Size for Given Design",
+            y = "Sample size (n)",
+            x = "Type I Risk"
+          ) +
+          theme_bw() +
+          theme(
+            text = element_text(size = 18)
+          )
+      } else if (input$horizQuant == "Type II Risk") {
+        ### Type II ----
+        sizes <- sapply(
+          X = seq(0.015, 0.3, 0.05),
+          FUN = getSize,
+          k = input$numGroups,
+          f = input$effectSize,
+          alpha = input$type1Risk
+        )
+        points <- data.frame(
+          type2Risk = seq(0.015, 0.3, 0.05),
+          raw_size = sizes,
+          round_size = sampleRounding(n = sizes, k = input$numGroups)
+        )
+
+        sampleSizePlot <- ggplot(
+          data = points,
+          mapping = aes(x = type2Risk, y = raw_size)
+        ) +
+          geom_point(color = "blue", size = 3) +
+          stat_function(
+            fun = getSize,
+            xlim = c(0.015, 0.30),
+            args = list(k = input$numGroups, f = input$effectSize,
+                        alpha = input$type1Risk)
+          ) +
+          labs(
+            title = "Suggested Sample Size for Given Design",
+            y = "Sample size (n)",
+            x = "Type II Risk"
+          ) +
+          theme_bw() +
+          theme(
+            text = element_text(size = 18)
+          )
+      }
+
+      output$sizePlot <- renderPlot(
+        expr = {sampleSizePlot}
+      )
+
+      description <- BrailleR::VI(x = sampleSizePlot)
+      description <- paste0("<p>", description$text, "</p>", collapse = "", recycle0 = TRUE)
+
+      output$plotDesc <- renderUI(
+        expr = {
+          tags$details(
+            id = "describeSampleSizePlot",
+            tags$summary("Sample size plot description"),
+            HTML(description)
+          )
+        }
+      )
+
     }
   )
 

@@ -1,20 +1,20 @@
-Title: Sample App - A Lengthy Title
-ShortName: Sample App
-Date: 2021-05-13
+Title: Study Design and Sample Size
+ShortName: Design: Sample Size
+Date: 2024-09-30
 Lifecycle: experimental
 Authors@R: c(
-    person(given = "Neil", family = "Hatfield", email = "neil.hatfield@psu.edu", role = c("aut", "cre")),
-    person(given = "Robert", family = "Carey", email = "rpc5102@psu.edu", role = c("aut"))
+    person(given = "Neil", family = "Hatfield", email = "neil.hatfield@psu.edu", role = c("aut", "cre"))
   )
-Chapter: Sample Chapter
-Description: This app is focused on the common types of xyz.
+Chapter: ANOVA
+Description: This app is focused on helping students explore sample size in the context of study design.
 LearningObjectives: c(
-    "The student will learn to understand Concept A in way z.",
-    "The student will learn to understand Concept B as description y."
+    "The student will build their understanding of how Type I risk influences sample size.",
+    "The student will build their understanding of how Type II risk (1 - power) influences sample size.",
+    "The student will build their understanding of how effect size influences sample size."
   )
 DisplayMode: Normal
-URL: https://psu-eberly.shinyapps.io/Sample_App
-BugReports: https://github.com/EducationShinyAppTeam/Sample_App/issues
+URL: https://psu-eberly.shinyapps.io/Study_Design_and_Sample_Size
+BugReports: https://github.com/EducationShinyAppTeam/Study_Design_and_Sample_Size/issues
 License: CC-BY-NC-SA-4.0
 Tags: simulation
 Type: Shiny

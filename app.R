@@ -181,7 +181,28 @@ ui <- list(
             "To calculate a sample size, we will need an estimate of the effect
             size. In one-way ANOVA/ANCOVA contexts, one effect size estimator is
             Cohen's", tags$em("f"), "statistic. This provides a measure of how
-            much variation in the response is explained by our factor."
+            much variation in the response is explained by our factor.",
+            br(),
+            "We can convert between other common effect sizes and Cohen's",
+            tags$em("f"), "by using the appropriate formula.",
+            tags$ul(
+              tags$li(
+                tags$strong("Minimum Difference:"), "if your effect size represents
+                the minimum difference between two groups that you take as important
+                (often represented with", tags$em("D"), "), we can use the formula
+                \\[f=\\sqrt{\\frac{D^2}{2g\\sigma^2}}\\] where", tags$em("g"),
+                "represents the number of groups and \\(\\sigma^2\\) represents
+                the variance of the model's error."
+              ),
+              tags$li(
+                tags$strong("Proportion of Variance Explained:"), "if you are
+                using the most common effect size in ANOVA settings, then you
+                are using the proportion of variance explained as measured by
+                \\(\\eta^2\\). (This is analogous to \\(r^2\\) in regression.)
+                We can convert \\(\\eta^2\\) to Cohen's", tags$em("f"), "by the
+                formula \\[f=\\sqrt{\\frac{\\eta^2}{1-\\eta^2}}\\]"
+              )
+            )
           ),
           box(
             title = strong("Balanced and Imbalanced Designs"),
@@ -251,7 +272,7 @@ ui <- list(
                   label = "Effect size, Cohen's \\(f\\)",
                   value = 0.1,
                   min = 0.05,
-                  max = 0.55,
+                  max = 1.5,
                   step = 0.05
                 ),
                 p("Suggested Values for Cohen's \\(f\\)"),
@@ -535,15 +556,22 @@ server <- function(input, output, session) {
     handlerExpr = {
       if (input$horizQuant == "Effect size") {
         ### Effect size ----
+        if (input$effectSize <= 0.5) {
+          effectInt <- seq(0.05, 0.50, 0.05)
+        } else if (input$effectSize <= 1) {
+          effectInt <- seq(0.55, 1, 0.05)
+        } else {
+          effectInt <- seq(1.05, 1.5, 0.05)
+        }
         sizes <- sapply(
-          X = seq(0.05, 0.5, 0.05),
+          X = effectInt,
           FUN = getSize,
           k = input$numGroups,
           alpha = input$type1Risk,
           power = input$power
         )
         points <- data.frame(
-          effect_size = seq(0.05, 0.5, 0.05),
+          effect_size = effectInt,
           rawSize  = sizes,
           size = sampleRounding(n = sizes, k = input$numGroups)
         )
@@ -555,7 +583,7 @@ server <- function(input, output, session) {
           geom_point(color = "blue", size = 3) +
           stat_function(
             fun = getSize,
-            xlim = c(0.05, 0.55),
+            xlim = c(min(effectInt), max(effectInt)),
             args = list(k = input$numGroups, alpha = input$type1Risk,
                         power = input$power)
           ) +

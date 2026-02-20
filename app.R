@@ -123,7 +123,7 @@ ui <- list(
             citeApp(),
             br(),
             br(),
-            div(class = "updated", "Last Update: 10/1/2024 by NJH.")
+            div(class = "updated", "Last Update: 2/20/2026 by NJH.")
           )
         ),
         ### Prerequisites Page ----
@@ -234,7 +234,8 @@ ui <- list(
             interact with each other and with sample size can help us become
             better designers."),
           p("Use the controls to explore how different elements impact the
-            suggested sample size."),
+            suggested sample size. Click the Update Graph button to how your
+            changes to the different controls impact the context."),
           fluidRow(
             column(
               width = 4,
@@ -281,6 +282,12 @@ ui <- list(
                   tags$li("Small: \\(0.1 \\leq f < 0.25\\)"),
                   tags$li("Medium: \\(0.25 \\leq f < 0.4\\)"),
                   tags$li("Large: \\(0.4 \\leq f\\)")
+                ),
+                bsButton(
+                  inputId = "makeSizePlot",
+                  label = "Update Graph",
+                  size = "large",
+                  icon = icon("retweet")
                 )
               )
             ),
@@ -551,11 +558,11 @@ server <- function(input, output, session) {
 
   ## Influences Plot ----
   observeEvent(
-    eventExpr = c(input$horizQuant, input$numGroups, input$type1Risk,
-                  input$power, input$effectSize),
+    eventExpr = input$makeSizePlot, # Switched to button due to rendering delays
     handlerExpr = {
+      ### Plot Cases ----
       if (input$horizQuant == "Effect size") {
-        ### Effect size ----
+        #### Effect size ----
         if (input$effectSize <= 0.5) {
           effectInt <- seq(0.05, 0.50, 0.05)
         } else if (input$effectSize <= 1) {
@@ -601,7 +608,7 @@ server <- function(input, output, session) {
             text = element_text(size = 18)
           )
       } else if (input$horizQuant == "Type I Risk") {
-        ### Type I ----
+        #### Type I Risk ----
         sizes <- sapply(
           X = c(0.01, 0.025, 0.03, 0.05, 0.075, 0.1, 0.125, 0.15),
           FUN = getSize,
@@ -640,7 +647,7 @@ server <- function(input, output, session) {
             text = element_text(size = 18)
           )
       } else if (input$horizQuant == "Power") {
-        ### Power ----
+        #### Power ----
         sizes <- sapply(
           X = c(0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99),
           FUN = getSize,
@@ -680,11 +687,20 @@ server <- function(input, output, session) {
           )
       }
 
+      ### Display the plot ----
       output$sizePlot <- renderPlot(
-        expr = {sampleSizePlot}
+        expr = {
+          validate(
+            need(
+              expr = !is.null(input$makeSizePlot) & input$makeSizePlot > 0,
+              message = "Click the Update Graph button to see the graph."
+            )
+          )
+          sampleSizePlot
+        }
       )
 
-      ### Generate Description ----
+      ### Generate Plot Description ----
       description <- BrailleR::VI(x = sampleSizePlot)
       description <- paste0("<p>", description$text, "</p>", collapse = "", recycle0 = TRUE)
 
@@ -710,231 +726,232 @@ server <- function(input, output, session) {
           )
         }
       )
+    },
+    ignoreNULL = FALSE,
+    ignoreInit = FALSE
+  )
 
-      ## Fixed Tradeoffs Plot ----
-      observeEvent(
-        eventExpr = c(input$fixedGrps, input$fixedSize, input$fixedEffect,
-                      input$fixedT1),
-        handlerExpr = {
-          ### Crit Val Calc ----
-          critVal <- qf(
-            p = input$fixedT1,
-            df1 = input$fixedGrps - 1,
-            df2 = input$fixedSize - input$fixedGrps,
-            lower.tail = FALSE
+  ## Fixed Tradeoffs Plot ----
+  observeEvent(
+    eventExpr = c(input$fixedGrps, input$fixedSize, input$fixedEffect,
+                  input$fixedT1),
+    handlerExpr = {
+      ### Crit Val Calc ----
+      critVal <- qf(
+        p = input$fixedT1,
+        df1 = input$fixedGrps - 1,
+        df2 = input$fixedSize - input$fixedGrps,
+        lower.tail = FALSE
+      )
+      newT2Risk <- pf(
+        q = critVal,
+        df1 = input$fixedGrps - 1,
+        df2 = input$fixedSize - input$fixedGrps,
+        ncp = input$fixedSize * (input$fixedEffect^2)
+      )
+      output$fixedT2Risk <- renderUI(
+        expr = {
+          withMathJax(
+            p("Type II Risk, \\(\\mathcal{E}_{II}=\\)", round(newT2Risk, digits = 2))
           )
-          newT2Risk <- pf(
-            q = critVal,
+        }
+      )
+
+      ### Make Plot ----
+      mainPlot <- ggplot() +
+        stat_function(
+          mapping = aes(color = "Null"),
+          fun = df,
+          args = list(
+            df1 = input$fixedGrps - 1,
+            df2 = input$fixedSize - input$fixedGrps),
+          xlim = c(0, 10)
+        ) +
+        stat_function(
+          mapping = aes(fill = "Null"),
+          geom = "area",
+          fun = df,
+          args = list(
+            df1 = input$fixedGrps - 1,
+            df2 = input$fixedSize - input$fixedGrps
+          ),
+          alpha = 0.2,
+          xlim = c(critVal, 10)
+        ) +
+        stat_function(
+          mapping = aes(color = "Alternative"),
+          fun = df,
+          args = list(
             df1 = input$fixedGrps - 1,
             df2 = input$fixedSize - input$fixedGrps,
             ncp = input$fixedSize * (input$fixedEffect^2)
-          )
-          output$fixedT2Risk <- renderUI(
-            expr = {
-              withMathJax(
-                p("Type II Risk, \\(\\mathcal{E}_{II}=\\)", round(newT2Risk, digits = 2))
-              )
-            }
-          )
+          ),
+          linetype = "dashed",
+          xlim = c(0, 10)
+        ) +
+        stat_function(
+          mapping = aes(fill = "Alternative"),
+          geom = "area",
+          fun = df,
+          args = list(
+            df1 = input$fixedGrps - 1,
+            df2 = input$fixedSize - input$fixedGrps,
+            ncp = input$fixedSize * (input$fixedEffect^2)
+          ),
+          alpha = 0.2,
+          linetype = "dashed",
+          xlim = c(0, critVal)
+        ) +
+        scale_color_manual(
+          name = "Model/Hypothesis",
+          values = c("Null" = "red", "Alternative" = "blue")
+        ) +
+        scale_fill_manual(
+          name = "Model/Hypothesis",
+          values = c("Null" = "red", "Alternative" = "blue")
+        ) +
+        scale_y_continuous(
+          expand = expansion(mult = c(0, 0.02))
+        ) +
+        labs(
+          title = "PDFs of Central and Noncenteral F",
+          x = "Values of the F Ratio",
+          y = "Probability Density"
+        ) +
+        theme_bw() +
+        theme(
+          text = element_text(size = 18)
+        )
 
-          ### Make Plot ----
-          mainPlot <- ggplot() +
-            stat_function(
-              mapping = aes(color = "Null"),
-              fun = df,
-              args = list(
-                df1 = input$fixedGrps - 1,
-                df2 = input$fixedSize - input$fixedGrps),
-              xlim = c(0, 10)
-            ) +
-            stat_function(
-              mapping = aes(fill = "Null"),
-              geom = "area",
-              fun = df,
-              args = list(
-                df1 = input$fixedGrps - 1,
-                df2 = input$fixedSize - input$fixedGrps
-              ),
-              alpha = 0.2,
-              xlim = c(critVal, 10)
-            ) +
-            stat_function(
-              mapping = aes(color = "Alternative"),
-              fun = df,
-              args = list(
-                df1 = input$fixedGrps - 1,
-                df2 = input$fixedSize - input$fixedGrps,
-                ncp = input$fixedSize * (input$fixedEffect^2)
-              ),
-              linetype = "dashed",
-              xlim = c(0, 10)
-            ) +
-            stat_function(
-              mapping = aes(fill = "Alternative"),
-              geom = "area",
-              fun = df,
-              args = list(
-                df1 = input$fixedGrps - 1,
-                df2 = input$fixedSize - input$fixedGrps,
-                ncp = input$fixedSize * (input$fixedEffect^2)
-              ),
-              alpha = 0.2,
-              linetype = "dashed",
-              xlim = c(0, critVal)
-            ) +
-            scale_color_manual(
-              name = "Model/Hypothesis",
-              values = c("Null" = "red", "Alternative" = "blue")
-            ) +
-            scale_fill_manual(
-              name = "Model/Hypothesis",
-              values = c("Null" = "red", "Alternative" = "blue")
-            ) +
-            scale_y_continuous(
-              expand = expansion(mult = c(0, 0.02))
-            ) +
-            labs(
-              title = "PDFs of Central and Noncenteral F",
-              x = "Values of the F Ratio",
-              y = "Probability Density"
-            ) +
-            theme_bw() +
-            theme(
-              text = element_text(size = 18)
-            )
-
-          output$fixedPlot <- renderPlot(
-            expr = {mainPlot}
-          )
-
-          ### Generate Description ----
-          description <- BrailleR::VI(x = mainPlot)
-          description <- paste0("<p>", description$text, "</p>", collapse = "", recycle0 = TRUE)
-
-          output$fixedPlotDescription <- renderUI(
-            expr = {HTML(description)}
-          )
-        }
+      ### Display the plot ----
+      output$fixedPlot <- renderPlot(
+        expr = {mainPlot}
       )
 
-      ## Varied Tradeoffs Plot ----
-      observeEvent(
-        eventExpr = c(input$variedGrps, input$variedEffect,
-                      input$variedT1, input$variedT2),
-        handlerExpr = {
-          ### Sample Size Calc ----
-          sampleSize <- getSize(
-            k = input$variedGrps,
-            alpha = input$variedT1,
-            power = 1 - input$variedT2,
-            f = input$variedEffect
-          )
-          balSize <- sampleRounding(n = sampleSize, k = input$variedGrps)
+      ### Generate Description ----
+      description <- BrailleR::VI(x = mainPlot)
+      description <- paste0("<p>", description$text, "</p>", collapse = "", recycle0 = TRUE)
 
-          output$variedSize <- renderUI(
-            expr = {
-              p("Suggested sample size for balanced design: N=", balSize)
-            }
-          )
-
-          ### Crit Val Calc ----
-          critVal <- qf(
-            p = input$variedT1,
-            df1 = input$variedGrps - 1,
-            df2 = balSize - input$variedGrps,
-            lower.tail = FALSE
-          )
-          newT2Risk <- pf(
-            q = critVal,
-            df1 = input$variedGrps - 1,
-            df2 = balSize - input$variedGrps,
-            ncp = balSize * (input$variedEffect^2)
-          )
-
-          ### Make Plot ----
-          mainPlot <- ggplot() +
-            stat_function(
-              mapping = aes(color = "Null"),
-              fun = df,
-              args = list(
-                df1 = input$variedGrps - 1,
-                df2 = balSize - input$variedGrps),
-              xlim = c(0, 10)
-            ) +
-            stat_function(
-              mapping = aes(fill = "Null"),
-              geom = "area",
-              fun = df,
-              args = list(
-                df1 = input$variedGrps - 1,
-                df2 = balSize - input$variedGrps
-              ),
-              alpha = 0.2,
-              xlim = c(critVal, 10)
-            ) +
-            stat_function(
-              mapping = aes(color = "Alternative"),
-              fun = df,
-              args = list(
-                df1 = input$variedGrps - 1,
-                df2 = balSize - input$variedGrps,
-                ncp = balSize * (input$variedEffect^2)
-              ),
-              linetype = "dashed",
-              xlim = c(0, 10)
-            ) +
-            stat_function(
-              mapping = aes(fill = "Alternative"),
-              geom = "area",
-              fun = df,
-              args = list(
-                df1 = input$variedGrps - 1,
-                df2 = balSize - input$variedGrps,
-                ncp = balSize * (input$variedEffect^2)
-              ),
-              alpha = 0.2,
-              linetype = "dashed",
-              xlim = c(0, critVal)
-            ) +
-            scale_color_manual(
-              name = "Model/Hypothesis",
-              values = c("Null" = "red", "Alternative" = "blue")
-            ) +
-            scale_fill_manual(
-              name = "Model/Hypothesis",
-              values = c("Null" = "red", "Alternative" = "blue")
-            ) +
-            scale_y_continuous(
-              expand = expansion(mult = c(0, 0.02))
-            ) +
-            labs(
-              title = "PDFs of Central and Noncenteral F",
-              x = "Values of the F Ratio",
-              y = "Probability Density"
-            ) +
-            theme_bw() +
-            theme(
-              text = element_text(size = 18)
-            )
-
-          output$variedPlot <- renderPlot(
-            expr = {mainPlot}
-          )
-
-          ### Generate Description ----
-          description <- BrailleR::VI(x = mainPlot)
-          description <- paste0("<p>", description$text, "</p>", collapse = "", recycle0 = TRUE)
-
-          output$variedPlotDescription <- renderUI(
-            expr = {HTML(description)}
-          )
-        }
+      output$fixedPlotDescription <- renderUI(
+        expr = {HTML(description)}
       )
-
     }
   )
 
+  ## Varied Tradeoffs Plot ----
+  observeEvent(
+    eventExpr = c(input$variedGrps, input$variedEffect,
+                  input$variedT1, input$variedT2),
+    handlerExpr = {
+      ### Sample Size Calc ----
+      sampleSize <- getSize(
+        k = input$variedGrps,
+        alpha = input$variedT1,
+        power = 1 - input$variedT2,
+        f = input$variedEffect
+      )
+      balSize <- sampleRounding(n = sampleSize, k = input$variedGrps)
 
+      output$variedSize <- renderUI(
+        expr = {
+          p("Suggested sample size for balanced design: N=", balSize)
+        }
+      )
+
+      ### Crit Val Calc ----
+      critVal <- qf(
+        p = input$variedT1,
+        df1 = input$variedGrps - 1,
+        df2 = balSize - input$variedGrps,
+        lower.tail = FALSE
+      )
+      newT2Risk <- pf(
+        q = critVal,
+        df1 = input$variedGrps - 1,
+        df2 = balSize - input$variedGrps,
+        ncp = balSize * (input$variedEffect^2)
+      )
+
+      ### Make Plot ----
+      mainPlot <- ggplot() +
+        stat_function(
+          mapping = aes(color = "Null"),
+          fun = df,
+          args = list(
+            df1 = input$variedGrps - 1,
+            df2 = balSize - input$variedGrps),
+          xlim = c(0, 10)
+        ) +
+        stat_function(
+          mapping = aes(fill = "Null"),
+          geom = "area",
+          fun = df,
+          args = list(
+            df1 = input$variedGrps - 1,
+            df2 = balSize - input$variedGrps
+          ),
+          alpha = 0.2,
+          xlim = c(critVal, 10)
+        ) +
+        stat_function(
+          mapping = aes(color = "Alternative"),
+          fun = df,
+          args = list(
+            df1 = input$variedGrps - 1,
+            df2 = balSize - input$variedGrps,
+            ncp = balSize * (input$variedEffect^2)
+          ),
+          linetype = "dashed",
+          xlim = c(0, 10)
+        ) +
+        stat_function(
+          mapping = aes(fill = "Alternative"),
+          geom = "area",
+          fun = df,
+          args = list(
+            df1 = input$variedGrps - 1,
+            df2 = balSize - input$variedGrps,
+            ncp = balSize * (input$variedEffect^2)
+          ),
+          alpha = 0.2,
+          linetype = "dashed",
+          xlim = c(0, critVal)
+        ) +
+        scale_color_manual(
+          name = "Model/Hypothesis",
+          values = c("Null" = "red", "Alternative" = "blue")
+        ) +
+        scale_fill_manual(
+          name = "Model/Hypothesis",
+          values = c("Null" = "red", "Alternative" = "blue")
+        ) +
+        scale_y_continuous(
+          expand = expansion(mult = c(0, 0.02))
+        ) +
+        labs(
+          title = "PDFs of Central and Noncenteral F",
+          x = "Values of the F Ratio",
+          y = "Probability Density"
+        ) +
+        theme_bw() +
+        theme(
+          text = element_text(size = 18)
+        )
+
+      ### Display the plot ----
+      output$variedPlot <- renderPlot(
+        expr = {mainPlot}
+      )
+
+      ### Generate Description ----
+      description <- BrailleR::VI(x = mainPlot)
+      description <- paste0("<p>", description$text, "</p>", collapse = "", recycle0 = TRUE)
+
+      output$variedPlotDescription <- renderUI(
+        expr = {HTML(description)}
+      )
+    }
+  )
 }
 
 # Boast App Call ----

@@ -72,6 +72,7 @@ ui <- list(
         menuItem("Prerequisites", tabName = "prerequisites", icon = icon("book")),
         menuItem("Explore Influences", tabName = "explore", icon = icon("wpexplorer")),
         menuItem("Explore Tradeoffs", tabName = "tradeoffs", icon = icon("wpexplorer")),
+        menuItem("Sample Size Calculator", tabName = "calc", icon = icon("calculator")),
         menuItem("References", tabName = "references", icon = icon("leanpub"))
       ),
       tags$div(
@@ -453,6 +454,27 @@ ui <- list(
                     tags$summary("Plot description"),
                     uiOutput("variedPlotDescription")
                   )
+                )
+              )
+            )
+          )
+        ),
+        ### Sample Size Calculator Page ----
+        tabItem(
+          tabName = "calc",
+          withMathJax(),
+          h2("Sample Size Calculator"),
+          p(tags$strong("This page is still experimental.")),
+          fluidRow(
+            column(
+              width = 6,
+              offset = 0,
+              wellPanel(
+                selectInput(
+                  inputId = "modelSelection",
+                  label = "Select a model type",
+                  choices = c("One-way ANOVA", "Two-way ANOVA", "Three-way ANOVA",
+                              "Repeated Measures ANOVA")
                 )
               )
             )
